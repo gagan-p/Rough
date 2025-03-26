@@ -1,0 +1,504 @@
+
+1. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\Main.java
+
+1 package com.sarvatra.appgw.cbdc;
+2 import org.springframework.boot.SpringApplication;
+3 import org.springframework.boot.autoconfigure.SpringBootApplication;
+4 @SpringBootApplication
+5 public class Main {
+6 	public static void main(String[] args) {
+7 		SpringApplication.run(Main.class, args);
+8 	}
+9 }
+
+1. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\Main.java
+
+2. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\controller\APPGWController.java
+
+1 package com.sarvatra.appgw.cbdc.controller;
+2 import java.util.Collections;
+3 import java.util.Date;
+4 import java.util.Map;
+5 import java.util.stream.Collectors;
+6 import javax.servlet.http.HttpServletRequest;
+7 import org.apache.logging.log4j.ThreadContext;
+8 import org.springframework.beans.factory.annotation.Autowired;
+9 import org.springframework.beans.factory.annotation.Value;
+10 import org.springframework.http.HttpStatus;
+11 import org.springframework.http.MediaType;
+12 import org.springframework.http.ResponseEntity;
+13 import org.springframework.web.bind.annotation.PathVariable;
+14 import org.springframework.web.bind.annotation.PostMapping;
+15 import org.springframework.web.bind.annotation.RequestBody;
+16 import org.springframework.web.bind.annotation.RequestMapping;
+17 import org.springframework.web.bind.annotation.RestController;
+18 import com.sarvatra.appgw.cbdc.exception.TimeoutException;
+19 import com.sarvatra.appgw.cbdc.helper.LogAdaptor;
+20 import com.sarvatra.appgw.cbdc.helper.LoggerUtil;
+21 import com.sarvatra.appgw.cbdc.services.RedissonService;
+22 import com.sarvatra.appgw.cbdc.services.UpstreamServices;
+23 @RestController
+24 @RequestMapping("/api")
+25 public class APPGWController {
+26 	private static final LogAdaptor log = LoggerUtil.getLogger("APPGWController");
+27 	private static final String UNIQUE_TXN_ID = "uniqueTxnId";
+28 	@Value("${print.http.headers}")
+29 	private boolean printHeaders;
+30 	@Autowired
+31 	private UpstreamServices service;
+32 	@Autowired
+33 	private RedissonService redissonService;
+34 	@PostMapping(value = {"/secure/app/{apiName}/{version}/urn:txnid:{uniqueTxnId}","/{apiName}/{version}/urn:txnid:{uniqueTxnId}"}, 
+35 			consumes = { MediaType.APPLICATION_XML_VALUE,MediaType.APPLICATION_JSON_VALUE },produces = { MediaType.APPLICATION_XML_VALUE,MediaType.APPLICATION_JSON_VALUE })
+36 	public ResponseEntity<String> appgwRequestSecure(@RequestBody String request, @PathVariable String uniqueTxnId, @PathVariable String apiName, @PathVariable String version,
+37 			HttpServletRequest httpRequest) {
+38 		ResponseEntity<String> response = null;
+39 		try {
+40 			ThreadContext.put(UNIQUE_TXN_ID, uniqueTxnId);
+41 			log.info("Request starts for uniqueTxnId : " + uniqueTxnId);
+42 			log.info(request);
+43 			log.info("Request ends for uniqueTxnId : " + uniqueTxnId);
+44 			String calledUrl = httpRequest.getRequestURI();
+45 			Map<String, String> headers = getHeaderParams(httpRequest);
+46 			printHeaders(headers);
+47 			Date starTime = new Date();
+48 			response = service.callUpstream(calledUrl, request, uniqueTxnId, headers);
+49 			Date endTime = new Date();
+50 			long millisecondsDifference = endTime.getTime() - starTime.getTime();
+51 			if (millisecondsDifference > 60000) {
+52 				log.error("request took more than 60sec to complete for ");
+53 			}
+54 			log.info("request completed in " + millisecondsDifference + "ms");
+55 		} catch (TimeoutException e) {
+56 			response = ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+57 					.body("Request has been timeout- no response from server");
+58 		} catch (Exception e) {
+59 			log.error(e.getMessage(), e);
+60 			response = ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+61 					.body("Something went wrong, please try again later");
+62 		} finally {
+63 			ThreadContext.remove(uniqueTxnId);
+64 		}
+65 		return response;
+66 	}
+67 	@PostMapping(value = "callback/{apiName}/{version}/urn:txnid:{uniqueTxnId}", consumes = {
+68 			MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE })
+69 	public void callBack(@RequestBody String response, @PathVariable String uniqueTxnId,@PathVariable String apiName, @PathVariable String version) {
+70 		try {
+71 			ThreadContext.put(UNIQUE_TXN_ID, uniqueTxnId);
+72 			log.info("Callback response starts for TxnId");
+73 			log.info(response);
+74 			redissonService.put(uniqueTxnId, response);
+75 			log.info("Callback response ends for TxnId");
+76 		} catch (Exception e) {
+77 			log.error(e.getMessage(), e);
+78 		} finally {
+79 			ThreadContext.remove(uniqueTxnId);
+80 		}
+81 	}
+82 	private Map<String, String> getHeaderParams(HttpServletRequest httpRequest) {
+83 		return Collections.list(httpRequest.getHeaderNames()).stream()
+84 				.collect(Collectors.toMap(name -> name, httpRequest::getHeader));
+85 	}
+86 	private void printHeaders(Map<String, String> headers) {
+87 		if (printHeaders) {
+88 			log.info("headers starts");
+89 			headers.forEach((k, v) -> log.info(k + "=" + v));
+90 			log.info("headers ends");
+91 		}
+92 	}
+93 }
+
+2. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\controller\APPGWController.java
+
+3. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\controller\UpstreamSimulator.java
+
+1 package com.sarvatra.appgw.cbdc.controller;
+2 import org.springframework.beans.factory.annotation.Autowired;
+3 import org.springframework.http.MediaType;
+4 import org.springframework.web.bind.annotation.PathVariable;
+5 import org.springframework.web.bind.annotation.PostMapping;
+6 import org.springframework.web.bind.annotation.RequestBody;
+7 import org.springframework.web.bind.annotation.RequestMapping;
+8 import org.springframework.web.bind.annotation.RestController;
+9 import com.sarvatra.appgw.cbdc.helper.LogAdaptor;
+10 import com.sarvatra.appgw.cbdc.helper.LoggerUtil;
+11 import com.sarvatra.appgw.cbdc.services.RedissonService;
+12 @RestController
+13 @RequestMapping("api-simulator")
+14 public class UpstreamSimulator {
+15 	private static final LogAdaptor log = LoggerUtil.getLogger("UpstreamSimulator");
+16 	private static final String UNIQUE_TXN_ID = "uniqueTxnId";
+17 	@Autowired
+18 	private RedissonService redissonService;
+19 	@PostMapping(value="/{apiName}/{version}/urn:txnid:{uniqueTxnId}", 
+20 			consumes = { MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE }, 
+21 	        produces = { MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE })
+22 	public void nofity(@RequestBody String request,@PathVariable(UNIQUE_TXN_ID) String uniqueTxnId,@PathVariable String apiName, @PathVariable String version){
+23 		log.info("Received request at upstream simulator >>>" + request);
+24 		redissonService.put(uniqueTxnId, "samplereponse");
+25 	}
+26 	@PostMapping(value="secure/app/{apiName}/{version}/urn:txnid:{uniqueTxnId}", 
+27 			consumes = { MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE }, 
+28 	        produces = { MediaType.APPLICATION_XML_VALUE, MediaType.APPLICATION_JSON_VALUE })
+29 	public void nofitySecure(@RequestBody String request,@PathVariable(UNIQUE_TXN_ID) String uniqueTxnId,@PathVariable String apiName, @PathVariable String version) {
+30 		log.info("Received request at upstream simulator secure >>>" + request);
+31 		redissonService.put(uniqueTxnId, "securesampleresponse");
+32 	}
+33 }
+
+3. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\controller\UpstreamSimulator.java
+
+4. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\exception\ServiceException.java
+
+1 package com.sarvatra.appgw.cbdc.exception;
+2 public class ServiceException extends Exception{
+3 	private static final long serialVersionUID = 1L;
+4 	public  ServiceException(){
+5 		super();
+6 	}
+7 	public ServiceException(Throwable e){
+8 		super(e);
+9 	}
+10 	public ServiceException(String message, Throwable cause){
+11 		super(message,cause);
+12 	}
+13 	public ServiceException(String message){
+14 		super(message);
+15 	}
+16 }
+
+4. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\exception\ServiceException.java
+
+5. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\exception\TimeoutException.java
+
+1 package com.sarvatra.appgw.cbdc.exception;
+2 public class TimeoutException extends Exception{
+3 	private static final long serialVersionUID = 1L;
+4 	public  TimeoutException(){
+5 		super();
+6 	}
+7 	public TimeoutException(Throwable e){
+8 		super(e);
+9 	}
+10 	public TimeoutException(String message, Throwable cause){
+11 		super(message,cause);
+12 	}
+13 	public TimeoutException(String message){
+14 		super(message);
+15 	}
+16 }
+
+5. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\exception\TimeoutException.java
+
+6. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\helper\LogAdaptor.java
+
+1 package com.sarvatra.appgw.cbdc.helper;
+2 import org.apache.logging.log4j.LogManager;
+3 import org.apache.logging.log4j.Logger;
+4 public class LogAdaptor {
+5 	private Logger logger;
+6 	public LogAdaptor(String className) {
+7 		 logger = LogManager.getLogger(className);
+8 	}
+9 	public void info(String o) {
+10 		logger.info(o);
+11 	}
+12 	public void debug(String o) {
+13 		logger.debug(o);
+14 	}
+15 	public void info(String o, Throwable e) {
+16 		logger.info(o, e);
+17 	}
+18 	public void error(String o) {
+19 		logger.error(o);
+20 	}
+21 	public void error(String o, Throwable e) {
+22 		logger.error(o, e);
+23 	}
+24 }
+
+6. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\helper\LogAdaptor.java
+
+7. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\helper\LoggerUtil.java
+
+1 package com.sarvatra.appgw.cbdc.helper;
+2 public class LoggerUtil extends LogAdaptor {
+3 	private LoggerUtil(String className) {
+4 		super(className);
+5 	}
+6 	public static LogAdaptor getLogger(String className) {
+7 		return new LoggerUtil(className);
+8 	}
+9 }
+
+7. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\helper\LoggerUtil.java
+
+8. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\helper\RestClientLegacy.java
+
+1 package com.sarvatra.appgw.cbdc.helper;
+2 import java.util.Map;
+3 import java.util.concurrent.TimeUnit;
+4 import javax.net.ssl.HostnameVerifier;
+5 import javax.net.ssl.HttpsURLConnection;
+6 import javax.net.ssl.SSLSession;
+7 import com.sarvatra.appgw.cbdc.exception.ServiceException;
+8 import com.squareup.okhttp.Headers;
+9 import com.squareup.okhttp.MediaType;
+10 import com.squareup.okhttp.OkHttpClient;
+11 import com.squareup.okhttp.Request;
+12 import com.squareup.okhttp.RequestBody;
+13 import com.squareup.okhttp.Response;
+14 public class RestClientLegacy {
+15 	private LogAdaptor log = LoggerUtil.getLogger("RestUtilTyped");
+16 	private static final String CONTENT_TYPE = "content-type";
+17 	private static final String APPLICATION_XML = "application/xml";
+18     private static final MediaType JSON = MediaType.parse("application/json; charset=utf-8");
+19     private static final MediaType XML = MediaType.parse("application/xml; charset=utf-8");
+20     public Response call(String restUrl, Object requestObj, final Map<String, String> headers) throws ServiceException{
+21         OkHttpClient httpClient = new OkHttpClient();
+22         httpClient.setConnectTimeout(5, TimeUnit.SECONDS);
+23         httpClient.setReadTimeout(1, TimeUnit.MINUTES);
+24         httpClient.setWriteTimeout(1, TimeUnit.MINUTES);
+25         httpClient.setHostnameVerifier(new HostnameVerifier() {
+26 			@Override
+27 			public boolean verify(String hostname, SSLSession session) {
+28                 HostnameVerifier hv =
+29                         HttpsURLConnection.getDefaultHostnameVerifier();
+30                 return hv.verify(restUrl, session);
+31 			}
+32 		});
+33         Request request = null;
+34         try {
+35         	log.debug("converting to json : " + requestObj);
+36 	        if(headers != null) {
+37 	            final Headers.Builder headerBuilder = new Headers.Builder();
+38 	            headers.forEach(headerBuilder::add);
+39 				if (headers.getOrDefault(CONTENT_TYPE, "").contains(APPLICATION_XML)) {
+40 					String reqXml = requestObj.toString();
+41 					request = new Request.Builder().url(restUrl)
+42 							.post(RequestBody.create(XML, reqXml))
+43 							.headers(headerBuilder.build())
+44 							.build();
+45 				} else {
+46 					request = new Request.Builder().url(restUrl)
+47 							.post(RequestBody.create(JSON, requestObj.toString()))
+48 							.headers(headerBuilder.build())
+49 							.build();
+50 				}
+51 	        }else{
+52 	            request = new Request.Builder().url(restUrl)
+53 	                    .post(RequestBody.create(JSON, requestObj.toString()))
+54 	                    .build();
+55 	        }
+56             return httpClient.newCall(request).execute();
+57         } catch (Exception e) {
+58         	log.error(e.getMessage(), e);
+59             throw new ServiceException(e.getMessage(), e);
+60         }
+61     }
+62 }
+
+8. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\helper\RestClientLegacy.java
+
+9. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\RedissonHelper.java
+
+1 package com.sarvatra.appgw.cbdc.services;
+2 import java.io.File;
+3 import java.io.IOException;
+4 import javax.annotation.PostConstruct;
+5 import org.redisson.Redisson;
+6 import org.redisson.api.RedissonClient;
+7 import org.redisson.config.Config;
+8 import org.springframework.beans.factory.annotation.Value;
+9 import org.springframework.stereotype.Component;
+10 @Component
+11 public class RedissonHelper {
+12 	private static RedissonClient instance;
+13 	@Value("${redisson.conf.file.path}")
+14 	private String redisFileName;
+15 	@PostConstruct
+16 	private void connect() throws IOException {
+17 		File file = new File(redisFileName);
+18 		Config config = Config.fromYAML(file);
+19 		instance = Redisson.create(config);
+20 	}
+21 	public static RedissonClient getInstance() {
+22 		return instance;
+23 	}
+24 }
+
+9. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\RedissonHelper.java
+
+10. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\RedissonService.java
+
+1 package com.sarvatra.appgw.cbdc.services;
+2 import org.springframework.http.ResponseEntity;
+3 import com.sarvatra.appgw.cbdc.exception.ServiceException;
+4 import com.sarvatra.appgw.cbdc.exception.TimeoutException;
+5 public interface RedissonService {
+6 	public void put(String key, String value);
+7 	ResponseEntity<String> checkRadisonForValue(String txnId) throws ServiceException, TimeoutException;
+8 	String waitForRedissonResponse(String uniqueTxnId) throws ServiceException, TimeoutException;
+9 }
+
+10. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\RedissonService.java
+
+11. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\RedissonServiceImpl.java
+
+1 package com.sarvatra.appgw.cbdc.services;
+2 import java.time.Duration;
+3 import java.util.Date;
+4 import org.redisson.api.RBucket;
+5 import org.springframework.beans.factory.annotation.Value;
+6 import org.springframework.http.ResponseEntity;
+7 import org.springframework.stereotype.Service;
+8 import com.sarvatra.appgw.cbdc.exception.ServiceException;
+9 import com.sarvatra.appgw.cbdc.exception.TimeoutException;
+10 import com.sarvatra.appgw.cbdc.helper.LogAdaptor;
+11 import com.sarvatra.appgw.cbdc.helper.LoggerUtil;
+12 @Service
+13 public class RedissonServiceImpl implements RedissonService{
+14 	private static final LogAdaptor LOG = LoggerUtil.getLogger("RedissonServiceImpl");
+15 	@Value("${timeout.redisson.read.millisec}")
+16 	private Long timeoutRedissonReadInMs;
+17 	public String get(String key) throws ServiceException{
+18 		String value = null;
+19 		RBucket<String> bucket = RedissonHelper.getInstance().getBucket(key.toUpperCase());
+20 		if(bucket.isExists()) {
+21 			value = bucket.get();
+22 			if(value != null) {
+23 				bucket.delete();
+24 			}
+25 		}
+26 		return value;
+27 	}
+28 	public void put(String key, String value){
+29 		RBucket<String> bucket = RedissonHelper.getInstance().getBucket(key.toUpperCase());
+30 		bucket.set(value, Duration.ofMinutes(10));
+31 	}
+32 	@Override
+33 	public ResponseEntity<String> checkRadisonForValue(String txnId) throws ServiceException, TimeoutException {
+34 		Date starTime = new Date();
+35     	LOG.info("waiting for redisson response ");
+36 		String redissonValue = waitForRedissonResponse(txnId);
+37 		Date endTime = new Date();
+38 		long millisecondsDifference =  endTime.getTime() - starTime.getTime();
+39 		LOG.info("Response fetched from redisson in "+millisecondsDifference+"ms");
+40 		return ResponseEntity.ok(redissonValue);
+41 	}
+42 	@Override
+43 	public String waitForRedissonResponse(String uniqueTxnId) throws ServiceException, TimeoutException {
+44 		long startTime = System.currentTimeMillis();
+45 		long waitTime = 100;
+46 		int tryCount = 1;
+47 		while((System.currentTimeMillis()-startTime) < timeoutRedissonReadInMs) {
+48 			try {
+49 				Thread.sleep(waitTime);
+50 				LOG.debug(tryCount + " try to fetch response from redisson ");
+51 				String value = get(uniqueTxnId);
+52 				if(value!=null && !value.trim().equals("")) {
+53 					LOG.info("redisson get end");
+54 					return value;
+55 				}
+56 				tryCount++;
+57 				waitTime *=2;
+58 			} catch (InterruptedException e) {
+59 				throw new ServiceException("Error while waiting at Redisson.");
+60 			}
+61 		}
+62 		LOG.error("Timeout while waiting at Redisson for uniqueTxnId ");
+63 		throw new TimeoutException("Timeout while waiting at Redisson for uniqueTxnId:"+uniqueTxnId);
+64 	}
+65 }
+
+11. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\RedissonServiceImpl.java
+
+12. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\UpstreamServices.java
+
+1 package com.sarvatra.appgw.cbdc.services;
+2 import java.util.Map;
+3 import org.springframework.http.ResponseEntity;
+4 import com.sarvatra.appgw.cbdc.exception.ServiceException;
+5 import com.sarvatra.appgw.cbdc.exception.TimeoutException;
+6 public interface UpstreamServices {
+7 	public ResponseEntity<String> callUpstream(String url, String request,String uniqueTxnId, Map<String, String> headers) throws ServiceException, TimeoutException;
+8 }
+
+12. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\UpstreamServices.java
+
+13. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\UpstreamServicesImpl.java
+
+1 package com.sarvatra.appgw.cbdc.services;
+2 import java.io.IOException;
+3 import java.util.Map;
+4 import org.springframework.beans.factory.annotation.Autowired;
+5 import org.springframework.beans.factory.annotation.Value;
+6 import org.springframework.http.HttpStatus;
+7 import org.springframework.http.ResponseEntity;
+8 import org.springframework.stereotype.Service;
+9 import com.sarvatra.appgw.cbdc.exception.ServiceException;
+10 import com.sarvatra.appgw.cbdc.exception.TimeoutException;
+11 import com.sarvatra.appgw.cbdc.helper.LogAdaptor;
+12 import com.sarvatra.appgw.cbdc.helper.LoggerUtil;
+13 import com.sarvatra.appgw.cbdc.helper.RestClientLegacy;
+14 import com.squareup.okhttp.Response;
+15 @Service
+16 public class UpstreamServicesImpl implements UpstreamServices{
+17 	private static final LogAdaptor LOG = LoggerUtil.getLogger("UpstreamServicesImpl");
+18 	@Value("${upstream.notifier.host}")
+19 	private String upstreamHost;
+20 	@Value("${simulator.mode}")
+21 	private boolean simulatorMode;
+22 	@Autowired
+23 	private RedissonService redissonService;
+24 	public ResponseEntity<String> callUpstream(String url, String request,String uniqueTxnId, Map<String, String> headers) throws ServiceException, TimeoutException {
+25 		Response response = null;
+26 		ResponseEntity<String> responseBody = null;
+27 		try {
+28 			String upstreamHostUrl = buildUpstreamURL(url);
+29 			response = callUpstream(request, headers, upstreamHostUrl);
+30 			if(response.code() == HttpStatus.OK.value()) {
+31 				responseBody = redissonService.checkRadisonForValue(uniqueTxnId);
+32 			} else {
+33 				String responseString = response.body().string();
+34 				LOG.info("response code : " + response.code() + "=" + responseString);
+35 				return ResponseEntity.status(response.code()).body(responseString);
+36 			}
+37 		} catch (Exception e) {
+38 			LOG.error(e.getMessage(),e);
+39 			throw new ServiceException(e.getMessage(),e);
+40 		} finally {
+41 			if(response != null) {
+42 				try {
+43 					response.body().close();
+44 				} catch (IOException e) {
+45 					LOG.error(e.getMessage(),e);
+46 				}
+47 			}
+48 		}
+49 		return responseBody;
+50 	}
+51 	private String buildUpstreamURL(String url) {
+52 		if(simulatorMode) {
+53 			url = url.replaceFirst("api", "api-simulator");
+54 		}
+55 		String upstreamHostBuild = upstreamHost + url;
+56 		LOG.info("Forwarding to URL: " + upstreamHostBuild);
+57 		return upstreamHostBuild;
+58 	}
+59 	private Response callUpstream(String request, Map<String, String> headers, String upstreamHost) throws ServiceException {
+60 		Response response = null;
+61 		try {
+62 			RestClientLegacy restUtil = new RestClientLegacy();
+63 			response = restUtil.call(upstreamHost, request, headers);
+64 		}catch (Exception e) {
+65 			LOG.error(e.getMessage(),e);
+66 			throw new ServiceException(e.getMessage(),e);
+67 		}
+68 		return response;
+69 	}
+70 }
+
+13. C:\Users\V1019448\Downloads\1.cbdc-app-backend-main\appgw\src\main\java\com\sarvatra\appgw\cbdc\services\UpstreamServicesImpl.java
+
