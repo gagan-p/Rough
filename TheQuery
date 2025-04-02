@@ -1,0 +1,111 @@
+
+
+---Query1: This just querys the This querys the complete database for the fields which are identified by the Verb SELECT
+SELECT TXN_ID, TDATE, ITC, STATUS, DISPLAY_MESSAGE, IRC, RC, CBS_RC, PSO_RC, DTSP_RC, AMOUNT, TOMAS_RC, DIRECTION, PAYER_RC, PAYEE_RC, UPI_CLIENT_TXN
+    FROM RTSP.TOKEN_TRANLOG;
+
+
+---Query 2: This querys the complete database for the fields which are identified by the Verb SELECT, then Partitions the whole output by the TXN_ID , 
+---inside each TXN_ID, this sorts the records by TDATE 
+---If you look at the TXN_D , you will note all transactions are grouped by the same TXN_ID
+----All transactions are sorted with in the TXN_ID grouping descending order of time 
+----See the above Query1 and figure out waht is happening , especially see the last colum rn 
+
+
+SELECT TXN_ID, TDATE, ITC, STATUS, DISPLAY_MESSAGE, IRC, RC, CBS_RC, PSO_RC, DTSP_RC, AMOUNT, TOMAS_RC, DIRECTION, PAYER_RC, PAYEE_RC, UPI_CLIENT_TXN,
+           ROW_NUMBER() OVER (PARTITION BY TXN_ID ORDER BY TDATE DESC) AS rn
+    FROM RTSP.TOKEN_TRANLOG;
+
+
+
+---Query 3: See Query 2 and now see Query 3, there is only two changes 
+----- The Query 2 generates a table with a new column identified as rn 
+------This whole table is now used to query so the from section of our new query now becomes the table that was generated in Query 2 
+SELECT *
+FROM (
+    SELECT TXN_ID, TDATE, ITC, STATUS, DISPLAY_MESSAGE, IRC, RC, CBS_RC, PSO_RC, DTSP_RC, AMOUNT, TOMAS_RC, DIRECTION, PAYER_RC, PAYEE_RC, UPI_CLIENT_TXN,
+           ROW_NUMBER() OVER (PARTITION BY TXN_ID ORDER BY TDATE DESC) AS rn
+    FROM RTSP.TOKEN_TRANLOG
+);
+
+---Query 4: We will add one condition to query 3, just see the change 
+-----The condition we will add is WHERE rn=1
+----Just look at the rn column
+----Think why are we doing it 
+SELECT *
+FROM (
+    SELECT TXN_ID, TDATE, ITC, STATUS, DISPLAY_MESSAGE, IRC, RC, CBS_RC, PSO_RC, DTSP_RC, AMOUNT, TOMAS_RC, DIRECTION, PAYER_RC, PAYEE_RC, UPI_CLIENT_TXN,
+           ROW_NUMBER() OVER (PARTITION BY TXN_ID ORDER BY TDATE DESC) AS rn
+    FROM RTSP.TOKEN_TRANLOG
+)
+Where rn =1;
+
+---Query 5: We will add one condition to query 4, just see the change 
+SELECT *
+FROM (
+    SELECT TXN_ID, TDATE, ITC, STATUS, DISPLAY_MESSAGE, IRC, RC, CBS_RC, PSO_RC, DTSP_RC, AMOUNT, TOMAS_RC, DIRECTION, PAYER_RC, PAYEE_RC, UPI_CLIENT_TXN,
+           ROW_NUMBER() OVER (PARTITION BY TXN_ID ORDER BY TDATE DESC) AS rn
+    FROM RTSP.TOKEN_TRANLOG
+)
+Where rn =1
+    AND STATUS != 'C';
+
+---Query 6 : Till Now we have been looking at transactions covering all dates 
+---Now we will look at only transactions if yesetday 
+ SELECT *
+FROM (
+    SELECT TXN_ID, TDATE, ITC, STATUS, DISPLAY_MESSAGE, IRC, RC, CBS_RC, PSO_RC, DTSP_RC, AMOUNT, TOMAS_RC, DIRECTION, PAYER_RC, PAYEE_RC, UPI_CLIENT_TXN,
+           ROW_NUMBER() OVER (PARTITION BY TXN_ID ORDER BY TDATE DESC) AS rn
+    FROM RTSP.TOKEN_TRANLOG
+)
+Where rn =1
+    AND STATUS != 'C'
+    AND TDATE = TRUNC(SYSDATE-1);
+
+----Query 7: What I am actually interested in 
+--- Every transaction has a response code=RC. 
+--- We are interested only in Unsucesfull transactions ==> Status != 'C' ## that is Status is not C
+--- Wether its a TD or BD will depend on the type of RC we get , hence we are getting the RCs for 
+        ---Display_Message
+        ---RC
+        ---CBS_RC
+        ---PSO_RC
+        ---DTSP_RC
+        ---DIRECTION <ONUS / OffUS>
+        ---PAYER_RC
+        ---PAYEE_RC
+        ---UPI_CLIENT_TXN
+----These are basically response codes 
+--- And these must be an unique list, ideally 
+---Hence lests first get the unique itesm for each of these 
+
+----Query 8: Please run the following querries one by one 
+----Keep the output in a sheet , name the sheet properly , keep all sheets in the same excel \
+
+  SELECT DISTINCT UPI_CLIENT_TXN FROM 
+  SELECT DISTINCT TXN_ID, RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT TDATE RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT ITC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT STATUS RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT DISPLAY_MESSAGE RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT IRC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT RC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT CBS_RC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT PSO_RC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT DTSP_RC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT TOMAS_RC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT DIRECTION RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT PAYER_RC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT PAYEE_RC RTSP.TOKEN_TRANLOG;
+  SELECT DISTINCT UPI_CLIENT_TXN RTSP.TOKEN_TRANLOG;
+
+  --- and this 
+   SELECT *
+FROM (
+    SELECT TXN_ID, TDATE, ITC, STATUS, DISPLAY_MESSAGE, IRC, RC, CBS_RC, PSO_RC, DTSP_RC, AMOUNT, TOMAS_RC, DIRECTION, PAYER_RC, PAYEE_RC, UPI_CLIENT_TXN,
+           ROW_NUMBER() OVER (PARTITION BY TXN_ID ORDER BY TDATE DESC) AS rn
+    FROM RTSP.TOKEN_TRANLOG
+)
+Where rn =1
+    AND STATUS != 'C'
+    AND TDATE = TRUNC(SYSDATE-1);
