@@ -5,6 +5,30 @@ Enhance the current file-based transaction processing system by replacing manual
 
 ---
 
+## Assumption
+We have Oracle > 12C
+
+---
+
+## Constraints
+Do not change schema in Database in anyway 
+
+---------
+
+## Few Points 
+1. We have made a simple logical change instead of splitting the file physically, do it logically inside the program. 
+
+2. The cuurent program needs the complete RTSP build , though the change is a simple one 
+
+3. In future to be safe we should introduce a flag column that deals explicitly to prevent double reads and retry {currently its implemented in the code as is, we are suggesting thinking through possible edge cases and update}
+
+4. At present the processing waits for the DB write to be complete, Its possible to start processing while the DB is being written, to be safe we can use two tables, one written by the Admin Portal and the other reading from the table that is being written and start processing with a lag. This can be achieved with a single table too. 
+
+5. Your input from a usage point of view would help , e.g it appears as if only one DBT disbursement can be effected at one time. What if multiple sponsors wants to run their scheme in the same time window. How this is implemented 
+
+---------
+
+
 ## Current System: Challenges and Limitations
 
 ### Process Flow:
