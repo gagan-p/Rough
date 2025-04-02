@@ -1,0 +1,96 @@
+# Approach Note: Offset-Based Pagination for Transaction Processing
+
+## Objective
+Enhance the current file-based transaction processing system by replacing manual file splitting and monolithic processing with an efficient, paginated batch-processing model using `OFFSET` and `LIMIT`. The aim is to improve throughput, reduce operational complexity, and maintain scalability without altering the existing table schema.
+
+---
+
+## Current System: Challenges and Limitations
+
+### Process Flow:
+1. Large input file (e.g., 20,000 records) is manually split into smaller chunks.
+2. Each chunk is uploaded and inserted into the database sequentially.
+3. After the full upload of a chunk, transaction processing is initiated.
+4. CountDownLatch controls thread synchronization.
+
+### Issues:
+
+| Area               | Problem                                               |
+|--------------------|--------------------------------------------------------|
+| **Operational Overhead** | Manual file splitting before upload               |
+| **Sequential Batching**  | Cannot process until each chunk is fully inserted |
+| **Thread Utilization**   | Fixed thread count regardless of actual data volume |
+| **Memory Load**          | Entire chunk fetched into memory before processing |
+| **Scalability**          | Not suitable for large file sizes or high-frequency uploads |
+
+---
+
+## Proposed Enhancement: Offset-Based Pagination
+
+### Overview:
+- Use a **single full file upload** into the database.
+- Implement **offset-based pagination** to fetch records in manageable batches.
+- Allocate threads **dynamically** based on remaining record volume.
+- Use **CountDownLatch per batch** for thread coordination.
+- No schema changes or additional columns are introduced.
+
+### Benefits:
+
+| Advantage            | Description                                             |
+|----------------------|---------------------------------------------------------|
+| **No File Splitting**    | Admin uploads full file without pre-processing         |
+| **Streaming Processing** | Fetch and process records in pages (e.g., 1,000 rows)  |
+| **Dynamic Threads**      | Adjust number of threads per batch automatically       |
+| **Lower Memory Footprint** | Only current batch is held in memory                  |
+| **Schema Stability**     | No changes to existing table structure                |
+
+---
+
+## Code-Level Implementation (Snippets)
+
+### Total Count and Pagination Setup:
+```java
+int totalRemainingRecords = getTotalRemainingRecords();
+int offset = 0;
+
+while (offset < totalRemainingRecords) {
+    int remaining = totalRemainingRecords - offset;
+    int threadsNeeded = Math.min(MaxThread, (int)Math.ceil((double) remaining / OptimumNuTxnPerThread));
+    int batchSize = threadsNeeded * OptimumNuTxnPerThread;
+
+    List<MerchantPayoutDetails> payoutTxnList = fetchTransactions(offset, batchSize);
+    offset += batchSize;
+
+    CountDownLatch latch = new CountDownLatch(payoutTxnList.size());
+    payoutTxnList.forEach(details -> 
+        getThreadPoolExecutor().execute(
+            new MerchantPayoutFeature(details, instituteCache, transactionName, transactionManagerQueue, latch, getLog())
+        )
+    );
+    latch.await();
+}
+```
+
+### Paginated Query (SQL):
+```sql
+SELECT * FROM merchant_payouts
+ORDER BY id
+OFFSET :offset ROWS FETCH NEXT :batchSize ROWS ONLY;
+```
+> *Note: For Oracle <12c, use ROWNUM subquery workaround.*
+
+---
+
+## System Impact Summary
+
+| System                    | Change                                        | Impact                                                   |
+|---------------------------|-----------------------------------------------|-----------------------------------------------------------|
+| **Admin Upload Portal**   | No change                                     | Same single-file upload functionality                     |
+| **Database**              | Query logic updated to use OFFSET             | Must support efficient pagination (Oracle 12c+ recommended) |
+| **Processing Service**    | Modified to fetch and process paged batches   | Thread logic refactored, CountDownLatch per batch         |
+| **MerchantPayoutManager** | Added offset + limit support in DAO method    | Enables paginated data access                             |
+
+---
+
+## Conclusion
+This approach removes the need for manual intervention, improves performance and scalability, and simplifies processing flow. It uses pagination via `OFFSET` and `LIMIT/FETCH` while maintaining schema stability and leveraging existing processing logic with minimal changes.
