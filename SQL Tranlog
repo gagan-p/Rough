@@ -34,3 +34,8 @@ WHERE
         trunc(t.tdate) >= trunc(sysdate) - 1
     AND trunc(t.tdate) < trunc(sysdate)
     AND t.status != 'C';
+
+
+Select REQ_TS,DURATION 
+from rtsp.token_tranlog
+where trunc(tdate) = trunc(sysdate);
