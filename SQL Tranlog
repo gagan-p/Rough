@@ -1,3 +1,4 @@
+---Query 1 
 SELECT
     ROW_NUMBER()
     OVER(PARTITION BY t.txn_id
@@ -26,8 +27,7 @@ SELECT
     t.capture_date,
     t.status,
     t.type,
-    t.rc,
-    t.init_vector
+    t.rc
 FROM
     rtsp.token_tranlog t
 WHERE
@@ -35,7 +35,154 @@ WHERE
     AND trunc(t.tdate) < trunc(sysdate)
     AND t.status != 'C';
 
-
+---Query 2 
 Select REQ_TS,DURATION 
 from rtsp.token_tranlog
 where trunc(tdate) = trunc(sysdate);
+
+---Query 3 
+SELECT DISTINCT itc FROM rtsp.token_tranlog;
+SELECT DISTINCT display_message FROM rtsp.token_tranlog;
+SELECT DISTINCT irc FROM rtsp.token_tranlog;
+SELECT DISTINCT pso_rc FROM rtsp.token_tranlog;
+SELECT DISTINCT cbs_rc FROM rtsp.token_tranlog;
+SELECT DISTINCT tomas_rc FROM rtsp.token_tranlog;
+SELECT DISTINCT tomas_confirm_rc FROM rtsp.token_tranlog;
+SELECT DISTINCT ext_rc FROM rtsp.token_tranlog;
+SELECT DISTINCT cbs_reversal_rc FROM rtsp.token_tranlog;
+SELECT DISTINCT cbs_irc FROM rtsp.token_tranlog;
+SELECT DISTINCT cbs_irc_details FROM rtsp.token_tranlog;
+SELECT DISTINCT tstatus FROM rtsp.token_tranlog;
+SELECT DISTINCT type FROM rtsp.token_tranlog;
+SELECT DISTINCT rc FROM rtsp.token_tranlog;
+
+----Query 4
+SELECT itc, COUNT(*) AS count_itc FROM rtsp.token_tranlog GROUP BY itc;
+SELECT display_message, COUNT(*) AS count_display_message FROM rtsp.token_tranlog GROUP BY display_message;
+SELECT irc, COUNT(*) AS count_irc FROM rtsp.token_tranlog GROUP BY irc;
+SELECT pso_rc, COUNT(*) AS count_pso_rc FROM rtsp.token_tranlog GROUP BY pso_rc;
+SELECT cbs_rc, COUNT(*) AS count_cbs_rc FROM rtsp.token_tranlog GROUP BY cbs_rc;
+SELECT tomas_rc, COUNT(*) AS count_tomas_rc FROM rtsp.token_tranlog GROUP BY tomas_rc;
+SELECT tomas_confirm_rc, COUNT(*) AS count_tomas_confirm_rc FROM rtsp.token_tranlog GROUP BY tomas_confirm_rc;
+SELECT ext_rc, COUNT(*) AS count_ext_rc FROM rtsp.token_tranlog GROUP BY ext_rc;
+SELECT cbs_reversal_rc, COUNT(*) AS count_cbs_reversal_rc FROM rtsp.token_tranlog GROUP BY cbs_reversal_rc;
+SELECT cbs_irc, COUNT(*) AS count_cbs_irc FROM rtsp.token_tranlog GROUP BY cbs_irc;
+SELECT cbs_irc_details, COUNT(*) AS count_cbs_irc_details FROM rtsp.token_tranlog GROUP BY cbs_irc_details;
+SELECT tstatus, COUNT(*) AS count_tstatus FROM rtsp.token_tranlog GROUP BY tstatus;
+SELECT type, COUNT(*) AS count_type FROM rtsp.token_tranlog GROUP BY type;
+SELECT rc, COUNT(*) AS count_rc FROM rtsp.token_tranlog GROUP BY rc;
+
+---Query 5
+SELECT COUNT(DISTINCT itc) AS unique_itc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT display_message) AS unique_display_message FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT irc) AS unique_irc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT pso_rc) AS unique_pso_rc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT cbs_rc) AS unique_cbs_rc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT tomas_rc) AS unique_tomas_rc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT tomas_confirm_rc) AS unique_tomas_confirm_rc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT ext_rc) AS unique_ext_rc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT cbs_reversal_rc) AS unique_cbs_reversal_rc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT cbs_irc) AS unique_cbs_irc FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT cbs_irc_details) AS unique_cbs_irc_details FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT status) AS unique_status FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT type) AS unique_type FROM rtsp.token_tranlog;
+SELECT COUNT(DISTINCT rc) AS unique_rc FROM rtsp.token_tranlog;
+
+---Query 6
+---I found that pso_rc has no unique value . In the sense that there is only (null) , there is no value , seems loke a reserved column at this stage
+---So I am checking if there is any other columns where we have reference to a message from PSO
+
+SELECT ID, ITC, TXN_ID, TYPE, STATUS, DISPLAY_MESSAGE, IRC, RC, SOURCE, DEST, 
+       CBS_LEG, PSO_LEG, CBS_STATUS, CBS_RC, PSO_STATUS, PSO_RC, DTSP_STATUS, 
+       DTSP_RC, TRANLOG_REF, AMOUNT, CBS_REF_ID, REMARK, TOMAS_RC, TOMAS_REF, 
+       STMT_LEG, PAYMENT_MODE, DIRECTION, CBS_REVERSAL_RC, TOMAS_CONFIRM_STATUS, 
+       TOMAS_CONFIRM_DATE, INITIATION_MODE, PURPOSE, REF_ID, REF_URL, REQ_TS, 
+       FLOW, CBS_REVERSAL_STATUS, CBS_NARRATION, PAYER_RC, PAYEE_RC, DURATION, 
+       TOMAS_CONFIRM_RC, EXT_RC, CBS_IRC, CBS_IRC_DETAILS
+FROM rtsp.token_tranlog
+WHERE DISPLAY_MESSAGE LIKE '%PSO%' 
+   OR IRC LIKE '%PSO%' 
+   OR RC LIKE '%PSO%' 
+   OR CBS_RC LIKE '%PSO%' 
+   OR PSO_RC LIKE '%PSO%' 
+   OR PSO_LEG LIKE '%PSO%' 
+   OR CBS_LEG LIKE '%PSO%' 
+   OR CBS_STATUS LIKE '%PSO%' 
+   OR PSO_STATUS LIKE '%PSO%' 
+   OR DTSP_STATUS LIKE '%PSO%' 
+   OR DTSP_RC LIKE '%PSO%' 
+   OR TOMAS_RC LIKE '%PSO%' 
+   OR TOMAS_CONFIRM_RC LIKE '%PSO%' 
+   OR TOMAS_CONFIRM_STATUS LIKE '%PSO%' 
+   OR TOMAS_CONFIRM_DATE LIKE '%PSO%' 
+   OR CBS_REVERSAL_RC LIKE '%PSO%' 
+   OR CBS_REVERSAL_STATUS LIKE '%PSO%' 
+   OR CBS_NARRATION LIKE '%PSO%' 
+   OR PAYER_RC LIKE '%PSO%' 
+   OR PAYEE_RC LIKE '%PSO%' 
+   OR EXT_RC LIKE '%PSO%' 
+   OR CBS_IRC LIKE '%PSO%' 
+   OR CBS_IRC_DETAILS LIKE '%PSO%';
+
+---- Query 7
+SELECT DISTINCT itc AS unique_value, 'itc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT display_message AS unique_value, 'display_message' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT irc AS unique_value, 'irc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT pso_rc AS unique_value, 'pso_rc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT cbs_rc AS unique_value, 'cbs_rc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT tomas_rc AS unique_value, 'tomas_rc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT tomas_confirm_rc AS unique_value, 'tomas_confirm_rc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT ext_rc AS unique_value, 'ext_rc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT cbs_reversal_rc AS unique_value, 'cbs_reversal_rc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT cbs_irc AS unique_value, 'cbs_irc' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT cbs_irc_details AS unique_value, 'cbs_irc_details' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT status AS unique_value, 'status' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT type AS unique_value, 'type' AS category FROM rtsp.token_tranlog
+UNION
+SELECT DISTINCT rc AS unique_value, 'rc' AS category FROM rtsp.token_tranlog;
+
+
+---Query8
+SELECT COUNT(DISTINCT unique_value) AS total_unique_values
+FROM (
+    SELECT itc AS unique_value FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT display_message FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT irc FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT pso_rc FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT cbs_rc FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT tomas_rc FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT tomas_confirm_rc FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT ext_rc FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT cbs_reversal_rc FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT cbs_irc FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT cbs_irc_details FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT status FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT type FROM rtsp.token_tranlog
+    UNION ALL
+    SELECT rc FROM rtsp.token_tranlog
+) AS combined_distinct_values;
+
