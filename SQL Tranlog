@@ -25,8 +25,37 @@ WHERE t.TXN_ID IN (
 );
 
 ----q2
-SELECT *, ROW_NUMBER() OVER (PARTITION BY TXN_ID ORDER BY TDATE) AS rn 
-FROM RTSP.TOKEN_TRANLOG 
-WHERE TRUNC(TDATE) >= TRUNC(SYSDATE) - 1 
-    AND TRUNC(TDATE) <TRUNC(SYADATE)
-    AND STATUS !='C';
+SELECT
+    ROW_NUMBER()
+    OVER(PARTITION BY t.txn_id
+         ORDER BY
+             t.tdate
+    ) AS rn,
+    t.id,
+    t.req_ts,
+    t.duration,
+    t.itc,
+    t.display_message,
+    t.txn_id,
+    t.irc,
+    t.pso_rc,
+    t.cbs_rc,
+    t.tomas_rc,
+    t.tomas_confirm_rc,
+    t.ext_rc,
+    t.cbs_reversal_rc,
+    t.cbs_irc,
+    t.cbs_irc_details,
+    t.amount,
+    t.tdate,
+    t.capture_date,
+    t.status,
+    t.type,
+    t.rc,
+    t.init_vector
+FROM
+    rtsp.token_tranlog t
+WHERE
+        trunc(t.tdate) >= trunc(sysdate) - 1
+    AND trunc(t.tdate) < trunc(sysdate)
+    AND t.status != 'C'
